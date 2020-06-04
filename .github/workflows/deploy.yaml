@@ -1,0 +1,42 @@
+name: Deploy
+on:
+  push:
+    branches:
+      - master
+jobs:
+  build:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Start deployment
+        uses: bobheadxi/deployments@master
+        id: deployment
+        with:
+          step: start
+          token: ${{ secrets.GITHUB_TOKEN }}
+          env: release
+      - name: Build Docker image
+        uses: whoan/docker-build-with-cache-action@v5
+        with:
+          image_name: gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.SERVICE_NAME }}
+          push_image_and_stages: false
+      - name: Deploy service to Cloud Run
+        uses: stefda/action-cloud-run@v1.0
+        with:
+          working_directory: ./
+          service key: ${{ secrets.GCLOUD_AUTH }}
+          project: ${{ secrets.GCP_PROJECT_ID }}
+          service: ${{ secrets.SERVICE_NAME }}
+          image: gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.SERVICE_NAME }}
+          region: ${{ secrets.GCP_REGION }}
+      - name: Update deployment status
+        uses: bobheadxi/deployments@master
+        if: always()
+        with:
+          step: finish
+          token: ${{ secrets.GITHUB_TOKEN }}
+          status: ${{ job.status }}
+          deployment_id: ${{ steps.deployment.outputs.deployment_id }}
+          env_url: https://console.cloud.google.com/run/detail/${{ secrets.GCP_REGION }}/${{ secrets.SERVICE_NAME }}?project=${{ secrets.GCP_PROJECT_ID }}
